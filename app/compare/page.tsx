@@ -1,3 +1,5 @@
+import { CompareView } from './compare-view'
+
 export default function ComparePage() {
-  return <div>Compare tab</div>
+  return <CompareView />
 }

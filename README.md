@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# YesterToday
 
-## Getting Started
+어제와 오늘의 날씨를 비교하고, 현재 체감온도·바람·강수를 기반으로 러닝 착장을 추천하는 모바일 퍼스트 PWA. Open-Meteo API를 사용하며 백엔드·데이터베이스 없이 localStorage만으로 동작한다.
 
-First, run the development server:
+## 로컬 개발
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 `http://localhost:3000` 접속 (→ `/compare` 자동 리다이렉트).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Vercel 배포
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. 이 저장소를 GitHub에 push
+2. [vercel.com](https://vercel.com) → **Add New Project** → GitHub 저장소 선택
+3. Framework: **Next.js** 자동 감지 확인 후 **Deploy**
+4. 배포 완료 후 생성된 URL로 접속
 
-## Learn More
+## iPhone 홈 화면 설치 (PWA)
 
-To learn more about Next.js, take a look at the following resources:
+1. Safari에서 배포된 URL 접속
+2. 하단 **공유** 버튼 탭
+3. **홈 화면에 추가** 선택 → **추가**
+4. 홈 화면의 YesterToday 아이콘으로 앱처럼 실행
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+> **아이콘 교체**: `public/icon-192.png`, `public/icon-512.png` 파일을 실제 아이콘으로 교체하면 된다 (현재는 slate-900 배경 + Y 텍스트 placeholder).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 로드맵
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| 단계 | 내용 |
+|------|------|
+| Phase 1 (현재) | 날씨 비교 탭 + 러닝 착장 탭, PWA 설치 가능 |
+| Phase 2 | 다크 모드, 마지막 위치 폴백 개선, 즐겨찾기 위치 |
+| Phase 3 | SwiftUI 네이티브 iOS 앱 + WidgetKit (Mac 구매 후) |

@@ -1,3 +1,5 @@
+import { RunningView } from './running-view'
+
 export default function RunningPage() {
-  return <div>Running tab</div>
+  return <RunningView />
 }
