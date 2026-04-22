@@ -21,6 +21,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'YesterToday',
   },
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export const viewport: Viewport = {
