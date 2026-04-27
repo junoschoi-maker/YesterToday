@@ -86,7 +86,7 @@ export async function fetchSunTimes(lat: number, lon: number): Promise<SunTimes>
 }
 
 // ── 24h strip (−3h to +20h around now) ───────────────────────
-export async function fetch24h(lat: number, lon: number): Promise<HourPoint[]> {
+export async function fetch24h(lat: number, lon: number): Promise<Extract<HourPoint, { kind: 'hour' }>[]> {
   const url = new URL(`${BASE}/forecast`)
   url.searchParams.set('latitude', String(lat))
   url.searchParams.set('longitude', String(lon))

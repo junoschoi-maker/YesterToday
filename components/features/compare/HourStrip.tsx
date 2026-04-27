@@ -153,7 +153,7 @@ export function HourStrip({ hours, dark }: Props) {
       >
         {hours.map((h, i) => {
           // Sun event column
-          if (h.kind === 'sunrise' || h.kind === 'sunset') {
+          if (h.kind !== 'hour') {
             return <SunEventCell key={`${h.kind}-${i}`} point={h} dark={dark} />
           }
 

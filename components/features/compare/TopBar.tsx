@@ -60,7 +60,6 @@ export function TopBar({ dark, location, refreshing, onRefresh }: TopBarProps) {
           width: 38,
           height: 38,
           borderRadius: 9999,
-          border: 'none',
           color: c,
           cursor: 'pointer',
           display: 'flex',
