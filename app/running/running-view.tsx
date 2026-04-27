@@ -1,157 +1,253 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { RotateCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState, useCallback } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { OutfitCard } from '@/components/features/running/OutfitCard'
-import { getCachedLocation, requestCurrentLocation, type SavedLocation } from '@/lib/location'
-import { getCurrentWeather } from '@/lib/weather'
-import { recommendOutfit, type OutfitRecommendation } from '@/lib/outfit/rules'
-import type { WeatherSnapshot } from '@/types/weather'
+import { TopBar } from '@/components/features/compare/TopBar'
+import { Avatar } from '@/components/features/running/Avatar'
+import { IconWind, IconRain, IconArrow } from '@/components/ui/icons'
+import { useSystemDark } from '@/lib/hooks/use-system-dark'
+import { fetchAllWeather } from '@/lib/weather/fetcher'
+import { saveLastWeather, loadLastWeather } from '@/lib/weather/cache'
+import { getCurrentLocation, getCachedLocation, getLocationOrDefault } from '@/lib/location'
+import { recommendOutfit } from '@/lib/outfit/rules'
+import type { OutfitRecommendation, AccessoryKind } from '@/lib/outfit/rules'
 
-const CURRENT_WEATHER_KEY = 'yestertoday.currentWeather'
-
-type CachedCurrent = {
-  snapshot: WeatherSnapshot
-  fetchedAt: string
+const ACC_LABELS: Record<AccessoryKind, string> = {
+  cap: '모자',
+  sunglasses: '선글라스',
+  beanie: '비니',
+  gloves: '장갑',
+  neckwarmer: '넥워머',
 }
 
-function getCachedCurrent(): CachedCurrent | null {
-  try {
-    const raw = localStorage.getItem(CURRENT_WEATHER_KEY)
-    return raw ? (JSON.parse(raw) as CachedCurrent) : null
-  } catch {
-    return null
+type Tone = 'good' | 'neutral' | 'bad'
+
+function SuitabilityBadge({
+  suitability,
+  dark,
+}: {
+  suitability: OutfitRecommendation['suitability']
+  dark: boolean
+}) {
+  const toneMap: Record<Tone, { bg: string; c: string; ring: string }> = {
+    good: {
+      bg: dark ? 'rgba(52,211,153,0.22)' : 'rgba(16,185,129,0.16)',
+      c: dark ? '#6ee7b7' : '#047857',
+      ring: dark ? 'rgba(110,231,183,0.35)' : 'rgba(16,185,129,0.3)',
+    },
+    neutral: {
+      bg: dark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.55)',
+      c: dark ? '#fff' : '#141824',
+      ring: dark ? 'rgba(255,255,255,0.2)' : 'rgba(20,24,36,0.1)',
+    },
+    bad: {
+      bg: dark ? 'rgba(248,113,113,0.22)' : 'rgba(239,68,68,0.12)',
+      c: dark ? '#fca5a5' : '#b91c1c',
+      ring: dark ? 'rgba(252,165,165,0.35)' : 'rgba(239,68,68,0.3)',
+    },
   }
+  const t = toneMap[suitability.tone]
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        background: t.bg,
+        color: t.c,
+        padding: '8px 16px',
+        borderRadius: 9999,
+        border: `0.5px solid ${t.ring}`,
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        fontSize: 16.5,
+        fontWeight: 700,
+        letterSpacing: -0.2,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{ fontSize: 18.5 }}>{suitability.emoji}</span>
+      {suitability.label}
+    </div>
+  )
 }
 
-function saveCachedCurrent(snapshot: WeatherSnapshot): void {
-  try {
-    localStorage.setItem(CURRENT_WEATHER_KEY, JSON.stringify({ snapshot, fetchedAt: new Date().toISOString() }))
-  } catch {
-    // storage quota exceeded
-  }
-}
+function RunningScreen({
+  recommendation,
+  dark,
+  location,
+  refreshing,
+  onRefresh,
+}: {
+  recommendation: OutfitRecommendation
+  dark: boolean
+  location: string
+  refreshing: boolean
+  onRefresh: () => void
+}) {
+  const c = dark ? '#fff' : '#141824'
+  const sc = dark ? 'rgba(255,255,255,0.7)' : 'rgba(20,24,36,0.62)'
+  const cellBg = dark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.55)'
+  const {
+    rule,
+    suitability,
+    feelsLikeC,
+    windMs,
+    precipitationMm,
+    rationaleBits,
+    needsWindbreaker,
+    needsRainGear,
+  } = recommendation
 
-type FetchState = 'loading' | 'ready' | 'stale' | 'error'
-type LocationState = 'loading' | 'denied' | 'unavailable' | 'ready'
+  const outfitItems = [
+    { label: '상의', value: rule.topLabel, dot: '#60a5fa' },
+    { label: '하의', value: rule.bottomLabel, dot: '#a78bfa' },
+    ...(rule.accessories.length > 0
+      ? [
+          {
+            label: '액세서리',
+            value: rule.accessories.map((a) => ACC_LABELS[a]).join(', '),
+            dot: '#fbbf24',
+          },
+        ]
+      : []),
+  ]
 
-export function RunningView() {
-  const [locationState, setLocationState] = useState<LocationState>('loading')
-  const [fetchState, setFetchState] = useState<FetchState>('loading')
-  const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null)
-  const [actualTempC, setActualTempC] = useState<number | null>(null)
-  const [location, setLocation] = useState<SavedLocation | null>(null)
-
-  async function fetchWeather(loc: SavedLocation) {
-    setFetchState('loading')
-    try {
-      const snapshot = await getCurrentWeather(loc.lat, loc.lon)
-      saveCachedCurrent(snapshot)
-      setActualTempC(snapshot.tempC)
-      setRecommendation(recommendOutfit(snapshot.feelsLikeC, snapshot.windMs, snapshot.precipitationMm))
-      setFetchState('ready')
-    } catch {
-      const cached = getCachedCurrent()
-      if (cached) {
-        const s = cached.snapshot
-        setActualTempC(s.tempC)
-        setRecommendation(recommendOutfit(s.feelsLikeC, s.windMs, s.precipitationMm))
-        setFetchState('stale')
-      } else {
-        setFetchState('error')
-      }
-    }
-  }
-
-  useEffect(() => {
-    const cachedLoc = getCachedLocation()
-    if (cachedLoc) {
-      setLocation(cachedLoc)
-      setLocationState('ready')
-      fetchWeather(cachedLoc)
-    }
-
-    requestCurrentLocation()
-      .then((loc) => {
-        setLocation(loc)
-        setLocationState('ready')
-        fetchWeather(loc)
-      })
-      .catch((err) => {
-        const kind = err.message === 'denied' ? 'denied' : 'unavailable'
-        if (!cachedLoc) setLocationState(kind as LocationState)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function handleRetry() {
-    setLocationState('loading')
-    const cachedLoc = getCachedLocation()
-    requestCurrentLocation()
-      .then((loc) => {
-        setLocation(loc)
-        setLocationState('ready')
-        fetchWeather(loc)
-      })
-      .catch((err) => {
-        const kind = err.message === 'denied' ? 'denied' : 'unavailable'
-        setLocationState(cachedLoc ? 'ready' : (kind as LocationState))
-      })
-  }
-
-  if (locationState === 'denied' || locationState === 'unavailable') {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 px-6 py-20 text-center">
-        <p className="text-base font-medium">위치 권한이 필요해요</p>
-        <p className="text-sm text-muted-foreground">
-          날씨 기반 착장 추천을 위해 현재 위치를 허용해주세요
-        </p>
-        <Button variant="outline" onClick={handleRetry}>
-          다시 시도
-        </Button>
-      </div>
-    )
-  }
-
-  const isDataLoading = fetchState === 'loading' && !recommendation
+  const warnColor = dark ? '#fde68a' : '#92400e'
 
   return (
-    <div className="flex flex-col gap-4 px-4 py-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {locationState === 'ready' ? '오늘 러닝 착장' : '위치 불러오는 중...'}
-        </p>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => location && fetchWeather(location)}
-          disabled={fetchState === 'loading'}
-          aria-label="새로고침"
-        >
-          <RotateCw className={fetchState === 'loading' ? 'animate-spin' : ''} />
-        </Button>
+    <div style={{ minHeight: '100%', paddingBottom: 100 }}>
+      <TopBar dark={dark} location={location} refreshing={refreshing} onRefresh={onRefresh} />
+      <div className="fade-in" style={{ textAlign: 'center', padding: '14px 20px 4px' }}>
+        <div style={{ marginBottom: 12 }}>
+          <SuitabilityBadge suitability={suitability} dark={dark} />
+        </div>
+        <div className="hero-num" style={{ fontSize: 110, color: c, margin: '0 -8px' }}>
+          {feelsLikeC}°
+        </div>
+        <div style={{ fontSize: 14.5, color: sc, fontWeight: 500, marginTop: 4 }}>체감온도</div>
       </div>
-
-      {fetchState === 'stale' && (
-        <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-          최신 정보를 불러올 수 없어요
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '16px 16px 0' }}>
+        {[
+          { icon: <IconWind size={20} color={c} animate={windMs > 3} />, label: '바람', value: windMs.toFixed(1), unit: 'm/s', warn: needsWindbreaker },
+          { icon: <IconRain size={20} color={c} animate={precipitationMm > 0.3} />, label: '강수', value: precipitationMm.toFixed(1), unit: 'mm', warn: needsRainGear },
+          { icon: <IconArrow dir={feelsLikeC > 20 ? 'up' : 'down'} size={18} color={c} />, label: '체감', value: String(feelsLikeC), unit: '°', warn: false },
+        ].map((cell, i) => (
+          <div key={i} style={{ background: cellBg, borderRadius: 22, backdropFilter: 'blur(18px) saturate(160%)', WebkitBackdropFilter: 'blur(18px) saturate(160%)', padding: '12px 10px', border: dark ? '0.5px solid rgba(255,255,255,0.12)' : '0.5px solid rgba(255,255,255,0.6)', display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
+            {cell.warn && <span style={{ position: 'absolute', top: 8, right: 8, width: 6, height: 6, borderRadius: 99, background: '#f59e0b' }} />}
+            <div style={{ color: c }}>{cell.icon}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5, color: sc, textTransform: 'uppercase' }}>{cell.label}</div>
+            <div style={{ fontSize: 21.5, fontWeight: 600, color: c, letterSpacing: -0.5, fontFeatureSettings: '"tnum" 1' }}>
+              {cell.value}<span style={{ fontSize: 12.5, fontWeight: 500, color: sc, marginLeft: 2 }}>{cell.unit}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className={`glass-card ${dark ? 'dark' : 'light'}`} style={{ margin: '16px 16px 0', padding: '12px 14px 0', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ flex: '0 0 auto', background: dark ? 'radial-gradient(circle at 50% 70%, rgba(255,255,255,0.12), transparent 70%)' : 'radial-gradient(circle at 50% 70%, rgba(255,255,255,0.6), transparent 70%)', borderRadius: 20, paddingTop: 6 }}>
+            <Avatar gender="male" top={rule.top} bottom={rule.bottom} accessories={rule.accessories} size={150} />
+          </div>
+          <div style={{ flex: 1, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {outfitItems.map((it, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: it.dot }} />
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: sc, letterSpacing: 0.8, textTransform: 'uppercase' }}>{it.label}</span>
+                </div>
+                <div style={{ fontSize: 15.5, fontWeight: 600, color: c, letterSpacing: -0.2 }}>{it.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ margin: '4px -14px 0', padding: '10px 18px', borderTop: dark ? '0.5px solid rgba(255,255,255,0.12)' : '0.5px solid rgba(20,24,36,0.08)', fontSize: 13.5, fontWeight: 500, color: dark ? 'rgba(255,255,255,0.62)' : 'rgba(20,24,36,0.55)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {rationaleBits.map((b, i) => <span key={i}>· {b}</span>)}
+        </div>
+      </div>
+      {(needsWindbreaker || needsRainGear) && (
+        <div style={{ margin: '12px 16px 0', padding: '10px 14px', borderRadius: 20, background: 'rgba(251,191,36,0.14)', border: dark ? '0.5px solid rgba(251,191,36,0.28)' : '0.5px solid rgba(251,191,36,0.4)', color: warnColor, fontSize: 14.5, fontWeight: 600, letterSpacing: -0.1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {needsWindbreaker && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><IconWind size={16} color={warnColor} /> 방풍 재킷 챙기자 · 체감 더 춥게 느껴질 거야</div>}
+          {needsRainGear && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><IconRain size={16} color={warnColor} /> 우비나 방수 재킷 필수 · 비 와</div>}
         </div>
       )}
+    </div>
+  )
+}
 
-      {isDataLoading ? (
-        <Skeleton className="h-80 w-full rounded-xl" />
-      ) : fetchState === 'error' ? (
-        <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <p className="text-sm text-muted-foreground">날씨 정보를 불러오지 못했어요</p>
-          <Button variant="outline" size="sm" onClick={() => location && fetchWeather(location)}>
-            다시 시도
-          </Button>
-        </div>
-      ) : recommendation && actualTempC !== null ? (
-        <OutfitCard recommendation={recommendation} actualTempC={actualTempC} />
-      ) : null}
+export function RunningView() {
+  const dark = useSystemDark()
+  const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [stale, setStale] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [location, setLocation] = useState(getLocationOrDefault())
+
+  const load = useCallback(async (lat: number, lon: number, label: string) => {
+    setLoading(true)
+    setStale(false)
+    try {
+      const result = await fetchAllWeather(lat, lon, label)
+      saveLastWeather(result)
+      setRecommendation(recommendOutfit(result.today.feelsLikeC, result.today.windMs, result.today.precipitationMm))
+    } catch {
+      const cached = loadLastWeather()
+      if (cached) {
+        setRecommendation(recommendOutfit(cached.today.feelsLikeC, cached.today.windMs, cached.today.precipitationMm))
+        setStale(true)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const cached = loadLastWeather()
+    if (cached) {
+      setRecommendation(recommendOutfit(cached.today.feelsLikeC, cached.today.windMs, cached.today.precipitationMm))
+      setLoading(false)
+      setStale(true)
+    }
+    const loc = getCachedLocation() ?? getLocationOrDefault()
+    setLocation(loc)
+    load(loc.lat, loc.lon, loc.label)
+    getCurrentLocation()
+      .then((freshLoc) => { setLocation(freshLoc); load(freshLoc.lat, freshLoc.lon, freshLoc.label) })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function handleRefresh() {
+    setRefreshing(true)
+    load(location.lat, location.lon, location.label).finally(() => setTimeout(() => setRefreshing(false), 900))
+  }
+
+  const bgClass = recommendation
+    ? recommendation.suitability.tone === 'good'
+      ? dark ? 'bg-warm-dark' : 'bg-warm-light'
+      : recommendation.suitability.tone === 'bad'
+        ? dark ? 'bg-cold-dark' : 'bg-cold-light'
+        : dark ? 'bg-neutral-dark' : 'bg-neutral-light'
+    : dark ? 'bg-neutral-dark' : 'bg-neutral-light'
+
+  return (
+    <div className={`${bgClass} stagger`} style={{ minHeight: '100dvh', position: 'relative', transition: 'background 0.6s ease', fontFamily: 'var(--font-yt-sans)' }}>
+      <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none', background: dark ? 'radial-gradient(ellipse at 50% 10%, rgba(255,255,255,0.08), transparent 60%)' : 'radial-gradient(ellipse at 50% 10%, rgba(255,255,255,0.4), transparent 60%)' }} />
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        {stale && !loading && (
+          <div style={{ margin: '8px 16px 0', padding: '8px 14px', borderRadius: 14, background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(20,24,36,0.06)', fontSize: 13, color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(20,24,36,0.55)', fontWeight: 500 }}>
+            최신 정보를 불러올 수 없어 이전 데이터를 표시해요
+          </div>
+        )}
+        {loading && !recommendation ? (
+          <div style={{ padding: '32px 16px', display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
+            <Skeleton className="h-28 w-40 rounded-2xl" />
+            <Skeleton className="h-4 w-24 rounded-full" />
+            <Skeleton className="h-48 w-full rounded-3xl" style={{ marginTop: 8 }} />
+          </div>
+        ) : recommendation ? (
+          <RunningScreen recommendation={recommendation} dark={dark} location={location.label} refreshing={refreshing} onRefresh={handleRefresh} />
+        ) : null}
+      </div>
     </div>
   )
 }

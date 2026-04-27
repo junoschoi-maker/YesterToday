@@ -1,19 +1,21 @@
 'use client'
 
-const STORAGE_KEY = 'yestertoday.lastLocation'
+const STORAGE_KEY = 'yt.lastLocation'
+
+// Seoul default fallback
+const DEFAULT_LOCATION: SavedLocation = {
+  lat: 37.5665,
+  lon: 126.978,
+  label: '서울',
+  savedAt: new Date(0).toISOString(),
+}
 
 export type SavedLocation = {
   lat: number
   lon: number
-  label?: string
+  label: string
   savedAt: string // ISO
 }
-
-export type LocationResult =
-  | { kind: 'ready'; location: SavedLocation; isFresh: boolean }
-  | { kind: 'denied' }
-  | { kind: 'unavailable' }
-  | { kind: 'loading' }
 
 export function getCachedLocation(): SavedLocation | null {
   try {
@@ -28,11 +30,40 @@ export function saveLocation(loc: SavedLocation): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loc))
   } catch {
-    // storage quota exceeded — silently ignore
+    // quota exceeded
   }
 }
 
-export function requestCurrentLocation(): Promise<SavedLocation> {
+// Reverse geocode via Open-Meteo geocoding API
+export async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse')
+    url.searchParams.set('lat', String(lat))
+    url.searchParams.set('lon', String(lon))
+    url.searchParams.set('format', 'json')
+    url.searchParams.set('zoom', '14')
+    url.searchParams.set('accept-language', 'ko')
+
+    const res = await fetch(url.toString(), {
+      headers: { 'User-Agent': 'YesterToday/1.0' },
+    })
+    if (!res.ok) return '현재 위치'
+
+    const json = await res.json()
+    const addr = json.address ?? {}
+
+    // Build "동 · 시" style label
+    const dong = addr.suburb ?? addr.neighbourhood ?? addr.quarter ?? addr.village ?? ''
+    const city = addr.city ?? addr.town ?? addr.county ?? ''
+
+    if (dong && city) return `${dong} · ${city}`
+    return city || dong || '현재 위치'
+  } catch {
+    return '현재 위치'
+  }
+}
+
+export async function getCurrentLocation(): Promise<SavedLocation> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('unavailable'))
@@ -40,36 +71,24 @@ export function requestCurrentLocation(): Promise<SavedLocation> {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc: SavedLocation = {
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          savedAt: new Date().toISOString(),
-        }
+      async (pos) => {
+        const { latitude: lat, longitude: lon } = pos.coords
+        const label = await reverseGeocode(lat, lon)
+        const loc: SavedLocation = { lat, lon, label, savedAt: new Date().toISOString() }
         saveLocation(loc)
         resolve(loc)
       },
       (err) => {
         reject(err.code === err.PERMISSION_DENIED ? new Error('denied') : new Error('unavailable'))
       },
-      { timeout: 8000, enableHighAccuracy: false },
+      { timeout: 8000, enableHighAccuracy: false }
     )
   })
 }
 
-/*
-Usage pattern in a client component:
+export function getLocationOrDefault(): SavedLocation {
+  return getCachedLocation() ?? DEFAULT_LOCATION
+}
 
-useEffect(() => {
-  const cached = getCachedLocation()
-  if (cached) setLocation({ kind: 'ready', location: cached, isFresh: false })
-
-  requestCurrentLocation()
-    .then((loc) => setLocation({ kind: 'ready', location: loc, isFresh: true }))
-    .catch((err) => {
-      const kind = err.message === 'denied' ? 'denied' : 'unavailable'
-      if (!cached) setLocation({ kind })
-      // else: keep cached data, show banner
-    })
-}, [])
-*/
+// Legacy alias
+export const requestCurrentLocation = getCurrentLocation
