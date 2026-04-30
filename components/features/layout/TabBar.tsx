@@ -22,7 +22,7 @@ export function TabBar() {
     <nav
       style={{
         position: 'fixed',
-        bottom: 28,
+        bottom: 'max(28px, calc(env(safe-area-inset-bottom) + 10px))',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 40,
