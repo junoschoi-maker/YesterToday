@@ -1,4 +1,4 @@
-// YesterToday Widget — Scriptable
+// Klim Widget — Scriptable
 // 어제 대비 오늘 실제 기온 차이
 // https://github.com/junoschoi-maker/YesterToday
 

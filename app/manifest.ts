@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'YesterToday',
-    short_name: 'Yester',
+    name: 'Klim',
+    short_name: 'Klim',
     description: '어제와 오늘 날씨 비교 + 러닝 착장 추천',
     theme_color: '#0f172a',
     background_color: '#ffffff',

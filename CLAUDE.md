@@ -1,4 +1,4 @@
-# YesterToday - Weather Comparison PWA
+# Klim - Weather Comparison PWA
 
 ## Product
 Compare yesterday's vs today's weather at user's location, and recommend running outfit based on feels-like temp & wind. Personal use, mobile-first PWA. Will be ported to native iOS (SwiftUI) in Phase 3.

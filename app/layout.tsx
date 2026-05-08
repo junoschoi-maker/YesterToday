@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'YesterToday',
-  description: '어제와 오늘 날씨 비교 + 러닝 착장 추천',
+  title: 'Klim',
+  description: '어제와 오늘 기온 차이 + 러닝 착장 추천',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'YesterToday',
+    title: 'Klim',
   },
   icons: {
     apple: '/apple-touch-icon.png',
