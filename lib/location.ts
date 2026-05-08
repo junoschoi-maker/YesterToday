@@ -45,7 +45,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
     url.searchParams.set('accept-language', 'ko')
 
     const res = await fetch(url.toString(), {
-      headers: { 'User-Agent': 'YesterToday/1.0' },
+      headers: { 'User-Agent': 'Klim/1.0' },
     })
     if (!res.ok) return '현재 위치'
 

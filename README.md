@@ -1,4 +1,4 @@
-# YesterToday
+# Klim
 
 어제와 오늘의 날씨를 비교하고, 현재 체감온도·바람·강수를 기반으로 러닝 착장을 추천하는 모바일 퍼스트 PWA. Open-Meteo API를 사용하며 백엔드·데이터베이스 없이 localStorage만으로 동작한다.
 
@@ -23,7 +23,7 @@ npm run dev
 1. Safari에서 배포된 URL 접속
 2. 하단 **공유** 버튼 탭
 3. **홈 화면에 추가** 선택 → **추가**
-4. 홈 화면의 YesterToday 아이콘으로 앱처럼 실행
+4. 홈 화면의 Klim 아이콘으로 앱처럼 실행
 
 > **아이콘 교체**: `public/icon-192.png`, `public/icon-512.png` 파일을 실제 아이콘으로 교체하면 된다 (현재는 slate-900 배경 + Y 텍스트 placeholder).
 
