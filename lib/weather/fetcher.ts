@@ -146,7 +146,7 @@ export async function fetchAllWeather(
   return {
     today,
     yesterday,
-    deltaC: today.feelsLikeC - yesterday.feelsLikeC,
+    deltaC: today.tempC - yesterday.tempC,
     diurnalRangeC: temps.length > 0 ? Math.max(...temps) - Math.min(...temps) : 8,
     laterMinC: futureTemps.length > 0 ? Math.min(...futureTemps) : today.tempC - 2,
     laterMaxC: futureTemps.length > 0 ? Math.max(...futureTemps) : today.tempC + 2,
